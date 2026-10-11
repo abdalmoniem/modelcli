@@ -6,21 +6,32 @@ description = "Call any LLM from the command line via models.dev"
 repository = "https://github.com/Blankeos/modelcli"
 license = "MIT"
 
+[features]
+vendored-openssl = ["dep:openssl"]
+
 [dependencies]
-rig-core = { version = "0.33", features = ["all"] }
+rig-core = { version = "0.33", default-features = false, features = ["all"] }
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-reqwest = { version = "0.12", features = ["json"] }
 inquire = "0.7"
-arboard = "3"
 dirs = "6"
 chrono = { version = "0.4", features = ["serde"] }
 futures = "0.3"
 colored = "2"
 anyhow = "1"
 json_comments = "0.2"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+arboard = "3"
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+# Use OpenSSL on Termux; rustls-platform-verifier requires a JVM and Android Context.
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "native-tls"] }
+# Enable only for cross-compilation environments that cannot use Termux's OpenSSL.
+openssl = { version = "0.10", optional = true, features = ["vendored"] }
 
 # The profile that 'dist' will build with
 [profile.dist]

@@ -89,8 +89,8 @@ pub async fn run() -> Result<()> {
             eprintln!("✓ Default model set to {full_model_id}");
         }
         Ok(ref a) if a.starts_with("Copy") => {
-            match arboard::Clipboard::new().and_then(|mut cb| cb.set_text(full_model_id.clone())) {
-                Ok(_) => eprintln!("✓ Copied '{full_model_id}' to clipboard."),
+            match copy_model_id_to_clipboard(full_model_id) {
+                Ok(()) => eprintln!("✓ Copied '{full_model_id}' to clipboard."),
                 Err(e) => eprintln!("Failed to copy to clipboard: {e}"),
             }
         }
@@ -99,5 +99,28 @@ pub async fn run() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+fn copy_model_id_to_clipboard(model_id: &str) -> Result<()> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new("termux-clipboard-set")
+        .stdin(Stdio::piped())
+        .spawn()?;
+    child.stdin.take().expect("stdin is piped").write_all(model_id.as_bytes())?;
+    let status = child.wait()?;
+    if !status.success() {
+        bail!("termux-clipboard-set exited with {status}");
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "android"))]
+fn copy_model_id_to_clipboard(model_id: &str) -> Result<()> {
+    let mut clipboard = arboard::Clipboard::new()?;
+    clipboard.set_text(model_id)?;
     Ok(())
 }

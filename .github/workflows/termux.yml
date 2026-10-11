@@ -1,0 +1,68 @@
+name: Termux Android ARM64
+
+on:
+  push:
+    branches: [main]
+    tags: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-termux:
+    name: Build Termux ARM64 binary
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install Android NDK
+        shell: bash
+        run: |
+          set +o pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.2.12479018"
+
+      - name: Configure Android NDK toolchain
+        shell: bash
+        run: |
+          ndk="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          test -x "$ndk/aarch64-linux-android24-clang"
+          test -x "$ndk/llvm-ar"
+          test -x "$ndk/llvm-ranlib"
+
+          # openssl-src invokes this legacy-prefixed ranlib name for Android.
+          tool_alias_dir="$RUNNER_TEMP/android-cross-bin"
+          mkdir -p "$tool_alias_dir"
+          ln -sf "$ndk/llvm-ranlib" "$tool_alias_dir/aarch64-linux-android-ranlib"
+          test -x "$tool_alias_dir/aarch64-linux-android-ranlib"
+          echo "$tool_alias_dir" >> "$GITHUB_PATH"
+
+          {
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ndk/aarch64-linux-android24-clang"
+            echo "CC_aarch64_linux_android=$ndk/aarch64-linux-android24-clang"
+            echo "CXX_aarch64_linux_android=$ndk/aarch64-linux-android24-clang++"
+            echo "AR_aarch64_linux_android=$ndk/llvm-ar"
+          } >> "$GITHUB_ENV"
+
+      - name: Build for Android ARM64
+        run: cargo build --release --target aarch64-linux-android --features vendored-openssl
+
+      - name: Verify Android ELF binary
+        run: |
+          file target/aarch64-linux-android/release/modelcli
+          readelf -h target/aarch64-linux-android/release/modelcli | grep -E 'Class:|Machine:'
+
+      - name: Upload Termux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: modelcli-termux-aarch64
+          path: target/aarch64-linux-android/release/modelcli
+          if-no-files-found: error
